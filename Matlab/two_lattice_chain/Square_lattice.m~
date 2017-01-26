@@ -1,0 +1,312 @@
+% Two dimensional lattice consisting of two different lattices
+
+%   a  b  a  ...
+%   b  a  b  ...
+%   a  b  a  ...
+%   .  .  .
+%   :  :  :
+
+
+% H = Omega * \sum_k phi* sigma_x^k (1-n_{k-1})  (1-n_{k+1})
+%
+% Omega: Rabi frequency
+%
+% The length of the pulse is parameterised
+%
+% 1st Pulse: Omega*t = phi
+% 2nd Pulse Omega*t = chi
+clear all;
+
+row = 3; % nr of atoms in a row  (Zeile)
+col = 3; % nr of  atoms in a column (Spalte)
+
+N = row * col;
+M = zeros(N); % Matrix defines connections between the qubits
+
+a = 1.0; % spacing between the spins (same disctance between the two chains)
+x = a*(1:N); % spin chain
+
+% Single particle operators and states
+
+up   = [1;0];
+down = [0;1];
+plus = 1/sqrt(2) *[1;1];
+
+sigma_x = [0,1;1,0];
+sigma_y = [0,-i;i,0];
+
+num     = [1,0; 0 ,0];
+one     = eye(2);
+
+
+
+    phi = [0:0.5:pi];
+    chi = [0:0.5:pi];
+
+Concurrence_9_8(length(chi),1:length(phi)) = 0;
+Concurrence_9_7(length(chi),1:length(phi)) = 0;
+Concurrence_9_2(length(chi),1:length(phi)) = 0;
+Concurrence_9_1(length(chi),1:length(phi)) = 0;
+Concurrence_1_2(length(chi),1:length(phi)) = 0;
+
+% Initial State 
+init = down;
+for cnt = 1:N-1
+       init   = sparse(kron(down,init)); % initial state vector
+end
+
+% CONSTRUCTION OF N PARTICLE OPERATORS SIGMA_Y and Num
+ num_op_m = sparse(N*2^N,2^N); % all N-particle number operators n_k are stored in this matrix
+ help_vec_n(1:2,1:2*N) = 0;    % helping vector to produce the N particle sigma_x operator
+ 
+ sig_y_k = sparse(N*2^N,2^N); % all N-particle Sigma_y are stored in this matrix
+ help_vec_s(1:2,1:2*N) = 0;  % helping vector to produce the N particle sigma_x operator
+
+    for cnt = 1:N
+
+              %Construction of number operators     
+              for cnt2 = 1:N
+
+                   if cnt2 == cnt
+                          help_vec_n(:,2*cnt2-1:2*cnt2) = num;
+                          continue
+                   end
+                   help_vec_n(:,2*cnt2-1:2*cnt2) = one;
+
+              end
+
+              n_k = sparse(help_vec_n(:,2*N-1:2*N));
+
+              for cnt3 = N-1:-1:1
+
+                  n_k =sparse(kron(help_vec_n(:,2*cnt3-1:2*cnt3),n_k));
+
+              end
+              num_op_m((cnt-1)*2^N+1:cnt*2^N,:) = n_k;
+
+              %Many particle sigma_x_k operator
+                for cnt2 = 1:N
+                     if cnt2 == cnt
+                          help_vec_s(:,2*cnt2-1:2*cnt2) = sigma_y;
+                          continue
+                     end
+                     help_vec_s(:,2*cnt2-1:2*cnt2) = one;
+
+                end
+
+                s_yk = help_vec_s(:,2*N-1:2*N);
+
+                for cnt3 = N-1:-1:1
+
+                  s_yk =sparse(kron(help_vec_s(:,2*cnt3-1:2*cnt3),s_yk));
+
+                end
+                sig_y_k ((cnt-1)*2^N+1:cnt*2^N,:) = s_yk;
+      end
+
+int = 1;
+    for cnt_row = 1: N
+        for cnt_col = 1:N
+           
+            if ( (int + 1) == cnt_col && mod(int,row) ~=0)
+     
+                 M(cnt_row,cnt_col) = 1;
+            elseif (cnt_col == int+row)
+                 M(cnt_row,cnt_col) = 1;
+            end
+               
+        end
+        int = int + 1;
+    end
+ M = M+M';
+    
+     
+ for cnt_chi = 1:length(chi)
+
+      for counter = 1:length(phi)
+  
+            % 1st step: phi pulse on all odd atoms
+            % --------- 
+            %          U(Omega*t = phi)
+
+            Hamil_odd = sparse(2^N,2^N); % Hamiltonian applied to the odd atoms
+            h_odd     = sparse(2^N,2^N); % helping vector to construct Hamil_odd
+
+         for cnt_row = 1:2: N % Pulse applied to all odd atoms
+
+               h_odd = sig_y_k((cnt_row-1)*2^N+1:cnt_row*2^N,:);
+
+               for cnt_col = 1:N
+                  if  M(cnt_row, cnt_col) == 1
+
+                     h_odd = h_odd * (eye(2^N)- num_op_m((cnt_col-1)*2^N+1:(cnt_col)*2^N,:));
+
+                  end
+               end
+               Hamil_odd = Hamil_odd + h_odd;
+               h_odd     = sparse(2^N,2^N);
+
+         end
+            Unitary_odd = sparse(expm(-i*phi(counter)*Hamil_odd)); 
+            Psi =    Unitary_odd* init   ;       
+
+
+
+                    % 1st step: pi pulse on all evem atoms
+            % --------- 
+            %          U(Omega*t = pi/2)
+            %          t = pi/(2*Omega)
+
+            Hamil_evn = sparse(2^N,2^N); % Hamiltonian applied to the odd atoms
+            h_evn     = sparse(2^N,2^N); % helping vector to construct Hamil_odd
+
+         for cnt_row = 2:2: N % Pulse applied to all odd atoms
+
+               h_evn = sig_y_k((cnt_row-1)*2^N+1:cnt_row*2^N,:);
+
+               for cnt_col = 1:N
+                  if  M(cnt_row, cnt_col) == 1
+
+                     h_evn = h_evn * (eye(2^N)- num_op_m((cnt_col-1)*2^N+1:(cnt_col)*2^N,:));
+
+                  end
+               end
+               Hamil_evn = Hamil_evn + h_odd;
+               h_evn     = sparse(2^N,2^N);
+
+         end
+         Unitary_evn = sparse(expm(-i*chi(cnt_chi)*Hamil_evn)); 
+         Psi =    Unitary_evn* Psi;
+
+ 
+    %    %reduced density matrix rho_{N-1,N}
+         Con_Nm1_N = red_density_matrix_Nm1_N(Psi,N);
+         Concurrence_9_8(cnt_chi,counter) = Con_Nm1_N;
+% 
+%     %  % reduced density matrix rho_{N-2,N}
+%          Con_Nm2_N = red_density_matrix_Nm2_N(Psi,N) ;
+%          Concurrence_9_7(cnt_chi,counter) =   Con_Nm2_N;
+% 
+%        % % reduced density matrix rho_{2,N}
+%          Con_2_N = red_density_matrix_2_N(Psi,N); 
+%          Concurrence_9_2(cnt_chi,counter) =  Con_2_N;
+%     
+%         % % % reduced density matrix rho_{1,N}
+%           Con_1_N = red_density_matrix_1_N(Psi,N) ;
+%           Concurrence_9_1(cnt_chi,counter) =  Con_1_N;
+%          
+%          %reduced density matrix rho_{1,2}
+%           Con_1_2 = red_density_matrix_1_2(Psi,N);
+%           Concurrence_1_2(cnt_chi,counter) =   Con_1_2;
+       end
+
+ end   
+ 
+ 
+  
+  figure
+surf(phi,chi,Concurrence_9_8)
+xlabel('\phi')
+ylabel('\chi')
+zlabel('C_{76}')
+xlim([0 pi])
+ylim([0 pi])
+colormap jet
+colorbar
+
+% 
+% figure
+% contourf(phi,chi,Concurrence_9_8)
+% xlabel('\phi')
+% ylabel('\chi')
+% title('C_{76}')
+% colormap jet
+% colorbar
+
+%     figure
+% surf(phi,chi,Concurrence_1_2)
+% xlabel('\phi')
+% ylabel('\chi')
+% zlabel('C_{12}')
+% xlim([0 pi])
+% ylim([0 pi])
+% colormap jet
+% colorbar
+% figure
+% contourf(phi,chi,Concurrence_1_2)
+% xlabel('\phi')
+% ylabel('\chi')
+% title('C_{12}')
+% colormap jet
+% colorbar
+% 
+% 
+% 
+% 
+% 
+% 
+% 
+%     figure
+% surf(phi,chi,Concurrence_9_7)
+% xlabel('\phi')
+% ylabel('\chi')
+% zlabel('C_{97}')
+% xlim([0 pi])
+% ylim([0 pi])
+% colormap jet
+% colorbar
+% 
+% figure
+% contourf(phi,chi,Concurrence_9_7)
+% xlabel('\phi')
+% ylabel('\chi')
+% title('C_{97}')
+% colormap jet
+%  colorbar
+%  
+%  
+% 
+% 
+%  
+% % 
+% 
+% 
+%     figure
+% surf(phi,chi,Concurrence_9_2)
+% xlabel('\phi')
+% ylabel('\chi')
+% zlabel('C_{92}')
+% xlim([0 pi])
+% ylim([0 pi])
+% colormap jet
+% colorbar
+% 
+% figure
+% contourf(phi,chi,Concurrence_9_2)
+% xlabel('\phi')
+% ylabel('\chi')
+% title('C_{92}')
+% colormap jet
+% colorbar
+% 
+% 
+%     figure
+% surf(phi,chi,Concurrence_9_1)
+% xlabel('\phi')
+% ylabel('\chi')
+% zlabel('C_{91}')
+% xlim([0 pi])
+% ylim([0 pi])
+% colormap jet
+% colorbar
+% 
+% figure
+% contourf(phi,chi,Concurrence_9_1)
+% xlabel('\phi')
+% ylabel('\chi')
+% title('C_{91}')
+% colormap jet
+% colorbar
+% 
+% 
+% 
